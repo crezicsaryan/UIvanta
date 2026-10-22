@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { checkRateLimit, createJob, runScreenshotAnalysis } from "@/lib/store";
+import { checkRateLimit, createJob, getJob, runScreenshotAnalysis } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const schema = z.object({
   fileName: z.string().max(160).optional(),
@@ -75,7 +76,8 @@ export async function POST(request: Request) {
     notes: data.notes,
   });
 
-  void runScreenshotAnalysis(job.id, {
+  // Run synchronously so the result survives the serverless invocation.
+  await runScreenshotAnalysis(job.id, {
     palette: data.palette,
     width: data.width,
     height: data.height,
@@ -83,9 +85,10 @@ export async function POST(request: Request) {
     notes: data.notes,
     fileName: data.fileName,
   });
+  const completed = getJob(job.id) ?? job;
 
   return NextResponse.json(
-    { id: job.id, status: "queued" },
-    { status: 202, headers: { "cache-control": "no-store" } }
+    { id: completed.id, status: completed.status, job: completed },
+    { status: 200, headers: { "cache-control": "no-store" } }
   );
 }

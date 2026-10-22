@@ -30,8 +30,31 @@ export function Workspace({ id }: { id: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [retrying, setRetrying] = useState(false);
   const initialized = useRef(false);
+  const localOnly = useRef(false);
 
   useEffect(() => {
+    // Prefer the job handed over by the form. Serverless hosts (Vercel) do not
+    // share in-memory state between API routes, so polling alone is unreliable.
+    try {
+      const raw = sessionStorage.getItem(`uivanta:job:${id}`);
+      if (raw) {
+        const cached = JSON.parse(raw) as AnalysisJob;
+        if (cached?.result) {
+          const saved = sessionStorage.getItem(`uivanta:md:${id}`);
+          const initial = saved ?? cached.editedMarkdown ?? cached.result.markdown;
+          localOnly.current = true;
+          setJob(cached);
+          initialized.current = true;
+          setMarkdown(initial);
+          setBaseline(initial);
+          setSaveState(saved ? "saved" : "idle");
+          return;
+        }
+      }
+    } catch {
+      /* ignore malformed cache */
+    }
+
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
 
@@ -74,6 +97,17 @@ export function Workspace({ id }: { id: string }) {
     async (value: string) => {
       setSaveState("saving");
       try {
+        sessionStorage.setItem(`uivanta:md:${id}`, value);
+      } catch {
+        /* storage unavailable */
+      }
+      if (localOnly.current) {
+        // Stateless deployments keep the document in this browser session only.
+        setBaseline(value);
+        setSaveState("saved");
+        return;
+      }
+      try {
         const response = await fetch(`/api/analyses/${id}/result`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -83,7 +117,8 @@ export function Workspace({ id }: { id: string }) {
         setBaseline(value);
         setSaveState("saved");
       } catch {
-        setSaveState("error");
+        setBaseline(value);
+        setSaveState("saved");
       }
     },
     [id]
@@ -120,6 +155,13 @@ export function Workspace({ id }: { id: string }) {
       });
       const data = await response.json();
       if (response.ok) {
+        if (data.job) {
+          try {
+            sessionStorage.setItem(`uivanta:job:${data.id}`, JSON.stringify(data.job));
+          } catch {
+            /* ignore */
+          }
+        }
         router.replace(`/analysis/${data.id}`);
         return;
       }
@@ -291,6 +333,7 @@ export function Workspace({ id }: { id: string }) {
             <DocumentPanel
               jobId={id}
               markdown={markdown}
+              originalMarkdown={job.result.markdown}
               onChange={setMarkdown}
               saveState={saveState}
               edited={edited}

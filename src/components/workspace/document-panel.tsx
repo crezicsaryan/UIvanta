@@ -21,6 +21,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export function DocumentPanel({
   jobId,
   markdown,
+  originalMarkdown,
   onChange,
   saveState,
   edited,
@@ -29,6 +30,7 @@ export function DocumentPanel({
 }: {
   jobId: string;
   markdown: string;
+  originalMarkdown: string;
   onChange: (value: string) => void;
   saveState: SaveState;
   edited: boolean;
@@ -62,9 +64,8 @@ export function DocumentPanel({
     setDownloading(true);
     try {
       await onFlush();
-      const response = await fetch(`/api/analyses/${jobId}/export`, { cache: "no-store" });
-      if (!response.ok) throw new Error("export failed");
-      const blob = await response.blob();
+      // Generate the file client-side so export works on stateless hosts too.
+      const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -73,8 +74,6 @@ export function DocumentPanel({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      /* surfaced through the save indicator */
     } finally {
       setDownloading(false);
     }
@@ -83,9 +82,9 @@ export function DocumentPanel({
   const regenerate = async () => {
     setRegenerating(true);
     try {
-      const response = await fetch(`/api/analyses/${jobId}/regenerate`, { method: "POST" });
-      const data = await response.json();
-      if (response.ok) onRegenerated(data.markdown);
+      // Regeneration rebuilds from the generated original. No server round-trip
+      // is needed, and stateless hosts have no stored job to ask.
+      onRegenerated(originalMarkdown);
     } finally {
       setRegenerating(false);
       setConfirming(false);

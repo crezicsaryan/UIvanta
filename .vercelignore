@@ -1,0 +1,9 @@
+promo-video/
+UIvanta-Promo-50s.mp4
+_shots/
+.workbuddy-ai/
+_ref/
+node_modules/
+.next/
+*.tsbuildinfo
+.git/

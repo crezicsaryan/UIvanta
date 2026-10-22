@@ -190,6 +190,13 @@ export function AnalyzeForm({
           setSubmitting(false);
           return;
         }
+        if (data.job) {
+          try {
+            sessionStorage.setItem(`uivanta:job:${data.id}`, JSON.stringify(data.job));
+          } catch {
+            /* storage unavailable — the workspace will fall back to polling */
+          }
+        }
         router.push(`/analysis/${data.id}`);
       } catch {
         setError({
@@ -238,6 +245,13 @@ export function AnalyzeForm({
         setError(data.error ?? { code: "ANALYSIS_FAILED", message: "Something went wrong." });
         setSubmitting(false);
         return;
+      }
+      if (data.job) {
+        try {
+          sessionStorage.setItem(`uivanta:job:${data.id}`, JSON.stringify(data.job));
+        } catch {
+          /* storage unavailable — the workspace will fall back to polling */
+        }
       }
       router.push(`/analysis/${data.id}`);
     } catch {

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AnalysisError } from "@/lib/errors";
-import { checkRateLimit, createJob, runUrlAnalysis } from "@/lib/store";
+import { checkRateLimit, createJob, getJob, runUrlAnalysis } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const bodySchema = z.object({
   sourceType: z.literal("url"),
@@ -73,12 +74,14 @@ export async function POST(request: Request) {
     notes: options?.notes,
   });
 
-  // Fire-and-forget: the client polls /api/analyses/:id for progress.
-  void runUrlAnalysis(job.id, url, viewport);
+  // Run synchronously: serverless hosts (Vercel) do not share in-memory state
+  // between API routes, so the job must be complete before we respond.
+  await runUrlAnalysis(job.id, url, viewport);
+  const completed = getJob(job.id) ?? job;
 
   return NextResponse.json(
-    { id: job.id, status: "queued" },
-    { status: 202, headers: { "cache-control": "no-store" } }
+    { id: completed.id, status: completed.status, job: completed },
+    { status: 200, headers: { "cache-control": "no-store" } }
   );
 }
 
